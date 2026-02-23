@@ -1,0 +1,7 @@
+# Ignore artifacts and movies
+build
+movies
+
+# Ignore deps
+deps
+python-remote/.venv
