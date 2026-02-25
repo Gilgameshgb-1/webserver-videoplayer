@@ -233,7 +233,11 @@ HTML_TEMPLATE = '''
 
     <body>
         <div id="gallery-view">
-            <div class="header"><div class="search-box"><input type="text" placeholder="Search movies..."></div></div>
+            <div class="header">
+                <div class="search-box">
+                    <input type="text" id="movie-search" placeholder="Search movies..." oninput="filterMovies()">
+                </div>
+            </div>
             <div class="grid">
                 {% for movie in movies %}
                 <div class="movie-card" onclick="openRemote('{{ movie.title }}', '{{ movie.video }}', '{{ movie.poster }}')">
@@ -345,6 +349,20 @@ HTML_TEMPLATE = '''
                 p.style.display = p.style.display === 'block' ? 'none' : 'block';
             }
             function setSub(id) { fetch('/api/command?q=' + encodeURIComponent('set sid ' + id)); toggleSubs(); }
+            
+            function filterMovies() {
+                const query = document.getElementById('movie-search').value.toLowerCase();
+                const cards = document.querySelectorAll('.movie-card');
+                
+                cards.forEach(card => {
+                    const title = card.getAttribute('onclick').toLowerCase();
+                    if (title.includes(query)) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            }
         </script>
     </body>
 </html>'''
