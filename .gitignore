@@ -5,3 +5,6 @@ movies
 # Ignore deps
 deps
 python-remote/.venv
+
+# Ignore .json for state of movies
+python-remote/resume_data.json

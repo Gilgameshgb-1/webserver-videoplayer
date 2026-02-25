@@ -29,7 +29,8 @@ int main() {
     check_mpv_error(mpv_initialize(ctx));
 
     while (true) {
-        mpv_event *event = mpv_wait_event(ctx, -1); // -1 wait forever
+        //mpv_event *event = mpv_wait_event(ctx, -1); // -1 wait forever
+        mpv_event *event = mpv_wait_event(ctx, 0.05); // we now poll cause we need progress bar updates
         
         if (event->event_id == MPV_EVENT_SHUTDOWN) break;
     }
