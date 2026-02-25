@@ -30,8 +30,8 @@ Whatever you want to play has to be in the folder "movies" inside of the root, p
 
 ## Usage and information
 
-<img src="mdAssets/imageMdOne.png" width="50%">
-<img src="mdAssets/ImageMdTwo.png" width="50%">
+<img src="mdAssets/imageMdOne.png" width="42.7%">
+<img src="mdAssets/ImageMdTwo.png" width="30%">
 
 Afterwards you can open the webserver URL that flask has provided you, where you will see the screen with movie selection. 
 
