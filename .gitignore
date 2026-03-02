@@ -6,5 +6,8 @@ movies
 deps
 python-remote/.venv
 
+# build artifacts
+python-remote/__pycache__
+
 # Ignore .json for state of movies
 python-remote/resume_data.json

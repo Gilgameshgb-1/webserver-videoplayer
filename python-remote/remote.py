@@ -3,6 +3,7 @@ import json
 import socket
 import platform
 from flask import Flask, render_template_string, request, jsonify, send_from_directory
+from torrent_downloader import search_yts, start_download, get_download_status, cancel_download
 
 app = Flask(__name__)
 
@@ -143,6 +144,40 @@ def stop_movie():
     query_mpv(["stop"])
     return "ok"
 
+@app.route('/api/torrent/search')
+def torrent_search():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({"error": "No query provided"}), 400
+    results = search_yts(query)
+    return jsonify(results)
+
+@app.route('/api/torrent/download', methods=['POST'])
+def torrent_download():
+    data = request.get_json()
+    magnet = data.get('magnet')
+    title = data.get('title', 'Unknown')
+    poster_url = data.get('poster_url')
+    if not magnet:
+        return jsonify({"error": "No magnet link provided"}), 400
+    dl_id = start_download(magnet, title, MOVIES_DIR, poster_url=poster_url)
+    return jsonify({"id": dl_id, "title": title, "status": "started"})
+
+@app.route('/api/torrent/status')
+def torrent_status():
+    dl_id = request.args.get('id', type=int)
+    result = get_download_status(dl_id)
+    return jsonify(result if result else {"error": "not found"})
+
+@app.route('/api/torrent/cancel', methods=['POST'])
+def torrent_cancel():
+    data = request.get_json()
+    dl_id = data.get('id')
+    if dl_id is None:
+        return jsonify({"error": "No id provided"}), 400
+    result = cancel_download(dl_id)
+    return jsonify(result)
+
 HTML_TEMPLATE = '''    
 <!DOCTYPE html>
     <html>
@@ -237,6 +272,9 @@ HTML_TEMPLATE = '''
                 <div class="search-box">
                     <input type="text" id="movie-search" placeholder="Search movies..." oninput="filterMovies()">
                 </div>
+                <div style="margin-top:10px; display:flex; gap:8px;">
+                    <button onclick="showDownloadView()" style="flex:1; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.1); color:white; font-size:14px; cursor:pointer;">Download movies</button>
+                </div>
             </div>
             <div class="grid">
                 {% for movie in movies %}
@@ -244,6 +282,26 @@ HTML_TEMPLATE = '''
                     <img src="{{ movie.poster }}">
                 </div>
                 {% endfor %}
+            </div>
+        </div>
+
+        <div id="download-view" style="display:none; padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <span onclick="closeDownloadView()" style="font-size:28px; cursor:pointer;">←</span>
+                <b>Download Movies</b>
+                <span style="width:28px;"></span>
+            </div>
+
+            <div class="search-box" style="margin-bottom:15px;">
+                <input type="text" id="torrent-search-input" placeholder="Search YTS..." onkeydown="if(event.key==='Enter') torrentSearch()">
+                <span onclick="torrentSearch()" style="cursor:pointer; font-size:20px; margin-left:8px;"></span>
+            </div>
+
+            <div id="torrent-results" style="max-height:55vh; overflow-y:auto;"></div>
+
+            <div id="active-downloads" style="margin-top:20px;">
+                <b style="display:block; margin-bottom:10px;">Active Downloads</b>
+                <div id="downloads-list"></div>
             </div>
         </div>
 
@@ -363,12 +421,112 @@ HTML_TEMPLATE = '''
                     }
                 });
             }
+
+            function showDownloadView() {
+                document.getElementById('gallery-view').style.display = 'none';
+                document.getElementById('download-view').style.display = 'block';
+                refreshDownloads();
+            }
+            function closeDownloadView() {
+                document.getElementById('download-view').style.display = 'none';
+                document.getElementById('gallery-view').style.display = 'block';
+                fetch('/api/movies').then(r => r.json()).then(movies => {
+                    const grid = document.querySelector('.grid');
+                    grid.innerHTML = movies.map(m => `
+                        <div class="movie-card" onclick="openRemote('${m.title}', '${m.video}', '${m.poster}')">
+                            <img src="${m.poster}">
+                        </div>
+                    `).join('');
+                });
+            }
+
+            function torrentSearch() {
+                const q = document.getElementById('torrent-search-input').value;
+                if (!q) return;
+                const container = document.getElementById('torrent-results');
+                container.innerHTML = '<p style="text-align:center; opacity:0.6;">Searching...</p>';
+
+                fetch('/api/torrent/search?q=' + encodeURIComponent(q))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.error) { container.innerHTML = '<p>' + data.error + '</p>'; return; }
+                        const items = data.data || [];
+                        if (!items.length) { container.innerHTML = '<p>No results</p>'; return; }
+                        container.innerHTML = items.map(m => {
+                            const torrents = (m.torrents || []).map(t =>
+                                `<button onclick='startDl(${JSON.stringify(t.magnet).replace(/'/g,"\\'")}, ${JSON.stringify(m.name).replace(/'/g,"\\'")}, ${JSON.stringify(m.poster || "").replace(/'/g,"\\'")})'
+                                    style="margin:3px; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.1); color:white; cursor:pointer; font-size:12px;">
+                                    ${t.quality || ''} ${t.type || ''} (${t.size || ''})
+                                </button>`
+                            ).join('');
+                            return `<div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
+                                <div style="display:flex; gap:10px; align-items:start;">
+                                    <img src="${m.poster || ''}" style="width:60px; border-radius:8px;" onerror="this.style.display='none'">
+                                    <div>
+                                        <b>${m.name || 'Unknown'}</b> <span style="opacity:0.5;">(${m.year || ''})</span>
+                                        <div style="font-size:12px; opacity:0.6; margin:4px 0;">${(m.genre || []).join(', ')}</div>
+                                        <div>${torrents}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                        }).join('');
+                    })
+                    .catch(e => { container.innerHTML = '<p>Error: ' + e + '</p>'; });
+            }
+
+            function startDl(magnet, title, poster_url) {
+                fetch('/api/torrent/download', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({magnet, title, poster_url})
+                }).then(r => r.json()).then(d => {
+                    refreshDownloads();
+                });
+            }
+
+            let dlInterval = null;
+            function refreshDownloads() {
+                fetch('/api/torrent/status')
+                    .then(r => r.json())
+                    .then(data => {
+                        const list = document.getElementById('downloads-list');
+                        if (!Array.isArray(data) || !data.length) {
+                            list.innerHTML = '<p style="opacity:0.5; font-size:13px;">No active downloads</p>';
+                            if (dlInterval) { clearInterval(dlInterval); dlInterval = null; }
+                            return;
+                        }
+                        list.innerHTML = data.map(d => {
+                            const rate = (d.download_rate / 1024).toFixed(0);
+                            return `<div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <b style="font-size:13px;">${d.title}</b>
+                                    <span style="font-size:12px; opacity:0.6;">${d.state}</span>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.2); border-radius:4px; height:8px; margin:6px 0;">
+                                    <div style="background:rgba(242,153,74,0.8); height:100%; border-radius:4px; width:${d.progress}%;"></div>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; font-size:11px; opacity:0.6;">
+                                    <span>${d.progress}% · ${rate} KB/s · ${d.num_peers} peers</span>
+                                    <span onclick="cancelDl(${d.id})" style="cursor:pointer; color:#ff6b6b;">Cancel</span>
+                                </div>
+                            </div>`;
+                        }).join('');
+                        if (!dlInterval) dlInterval = setInterval(refreshDownloads, 2000);
+                    });
+            }
+
+            function cancelDl(id) {
+                fetch('/api/torrent/cancel', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id})
+                }).then(() => refreshDownloads());
+            }
         </script>
     </body>
 </html>'''
 
-@app.route('/')
-def index():
+def _scan_movies():
     movie_data = []
     if os.path.exists(MOVIES_DIR):
         for folder in os.listdir(MOVIES_DIR):
@@ -377,14 +535,21 @@ def index():
                 files = os.listdir(folder_path)
                 video = next((f for f in files if f.endswith(('.mp4', '.mkv'))), None)
                 poster = next((f for f in files if f.endswith('.jpg')), None)
-                
                 if video:
                     movie_data.append({
                         'title': folder,
-                        'video': f"{folder}/{video}", 
+                        'video': f"{folder}/{video}",
                         'poster': f"/get_poster/{folder}/{poster}"
                     })
-    return render_template_string(HTML_TEMPLATE, movies=movie_data)
+    return movie_data
+
+@app.route('/api/movies')
+def api_movies():
+    return jsonify(_scan_movies())
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE, movies=_scan_movies())
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
