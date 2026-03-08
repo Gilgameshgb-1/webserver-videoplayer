@@ -1,60 +1,74 @@
-# Webserver video player
+# Huberry Stream
 
-Raw ipc socket video player, cpp mpv code runs as just a window that we can communicate to via our python webserver.
+A phone-controlled movie player built around MPV. A C++ process runs MPV as a bare window with an IPC socket exposed, and a Flask webserver lets you control it from any browser on the same network, intended to be used as a phone remote.
 
-## Installation steps
-For now this  is unneccessary since it's mostly to be used in conjuction with the retro-gaming linux repository I have on my github. However it's currently made in windows so if you do want to run it here are the steps.
+Built to run on a Raspberry Pi 5 as part of a larger retro-gaming Linux setup, but also works standalone on Windows during development.
 
-First for windows you will need the mpv .dlls and move it into the deps folder you have to create inside root.
-Afterwards just run the following commands
+<img src="mdAssets/bannerStream.svg" width="60%" style="display: block; margin: 0 auto;">
+
+---
+
+## Installation
+
+This is primarily meant to be used alongside the retro-gaming Linux repository. For standalone Windows use:
+
+**1. Build the C++ player**
+
+Place the MPV `.dll` files into a `deps/` folder in the project root, then run:
 
 ```
 .\buildAndRun.ps1
 ```
 
-This will build the player and open the window.
-Afterwards just run the flaskwebserver, you will need to install all neccessary packages inside of requirements.txt
+This compiles and opens the player window.
+
+**2. Start the Flask server**
 
 ```
+/venv/scripts/Activate.ps1
+
 python remote.py
 ```
 
-## Video locations
-Whatever you want to play has to be in the folder "movies" inside of the root, please create the folder and place your content. Currently the name of the folders is automatically what is picked up by the player as the "title".
+Install dependencies first if needed: `pip install -r requirements.txt`
 
-* Organization: Place each movie in its own subfolder.
+---
 
-* Titles: The player automatically uses the folder name as the movie title.
+## Movie library
 
-* Posters: Ensure each folder contains a .jpg file to be used as the gallery thumbnail.
+Each movie lives in its own subfolder inside `movies/` at the project root.
 
-## Usage and information
+- **Title** — taken automatically from the folder name
+- **Poster** — any `.jpg` file found inside the folder is used as the gallery thumbnail
+- **Subtitles** — `.srt` files in the folder are available via the CC button in the remote
+---
 
-<img src="mdAssets/imageMdOne.png" width="42.7%">
-<img src="mdAssets/ImageMdTwo.png" width="30%">
+## Features
 
-Afterwards you can open the webserver URL that flask has provided you, where you will see the screen with movie selection. 
+<img src="mdAssets/imageMdOne.jpg" width="30%">
+<img src="mdAssets/ImageMdTwo.jpg" width="30%">
+<img src="mdAssets/ImageMdThree.jpg" width="30%">
 
-Open the webserver URL provided by Flask in your browser.
+**Gallery**: Searchable 3-column movie grid. Tap any poster to see information about it and play it.
 
-* Select a movie from the gallery. It will start playing automatically in the C++ player window.
+**Remote control**: Once a movie is open, the browser becomes a remote:
+- Play / Pause
+- Skip ±10 seconds
+- Tap anywhere on the progress bar to seek to that position
+- Toggle subtitles (CC)
+- Stop & Save: stops playback and saves your position
 
-* Controls: From your browser, you can:
+**Movie switching**: tapping a card while something is already playing has three behaviours:
+1. Same movie → jumps to the remote view instantly, no reload
+2. Different movie → a confirmation dialog appears before switching, and your current position is saved automatically
+3. Nothing playing → loads immediately
 
-    * Pause/Play playback.
-
-    * Seek ±10 seconds via buttons.
-
-    * Use the interactive progress bar for absolute seeking.
-
-    * Toggle closed captions (CC).
+---
 
 ## Legal disclaimer
 
-Important: This software is intended strictly for personal, educational, and non-commercial use.
+This software is intended strictly for personal, educational, and non-commercial use.
 
-* Copyrighted Material: Any movie titles, images, or posters shown in the screenshots or documentation are used for demonstration purposes only. All intellectual property rights belong to their respective owners.
-
-* Compliance: Users are responsible for ensuring they have the legal right to play any content loaded into the "movies" directory. The author does not condone or facilitate copyright infringement.
-
-* Liability: The author is not responsible for any misuse of this software or for any legal issues arising from the use of copyrighted material.
+- Any movie titles, images, or posters shown in screenshots or documentation are used for demonstration purposes only. All rights belong to their respective owners.
+- Users are responsible for ensuring they have the legal right to play any content loaded into the movies directory.
+- The author is not responsible for any misuse of this software or legal issues arising from use of copyrighted material.

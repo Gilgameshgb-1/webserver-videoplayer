@@ -1,0 +1,594 @@
+:root {
+    --bg:             #26031b;
+    --accent:         #d4166e;
+    --accent-dim:     rgba(212, 22, 110, 0.18);
+    --accent-glow:    rgba(212, 22, 110, 0.35);
+    --text:           #ffffff;
+    --text-muted:     rgba(255, 255, 255, 0.55);
+    --card-bg:        rgba(255, 255, 255, 0.06);
+    --border:         rgba(255, 255, 255, 0.12);
+    --chip-inactive:  rgba(255, 255, 255, 0.09);
+    --progress-track: rgba(255, 255, 255, 0.18);
+    --nav-btn-bg:     rgba(60, 0, 50, 0.85);
+    --nav-btn-border: rgba(180, 80, 160, 0.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    height: 100dvh;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background-image: url('/assets/patternStream.svg');
+    background-size: 380px;
+    background-repeat: repeat;
+    opacity: 0.35;
+    mix-blend-mode: screen;
+}
+
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+        180deg,
+        rgba(92, 0, 78, 0.0)  0%,
+        rgba(92, 0, 78, 0.45) 55%,
+        rgba(92, 0, 78, 0.82) 100%
+    );
+}
+
+/* ─── View containers ──────────────────────────────────────── */
+#gallery-view,
+#download-view,
+#remote-view {
+    display: none;
+}
+
+#gallery-view  { display: flex; flex-direction: column; height: 100dvh; }
+#download-view { padding: 0 16px 30px; overflow-y: auto; height: 100dvh; box-sizing: border-box; }
+#remote-view   { padding: 0 16px 20px; display: none; flex-direction: column; height: 100dvh; box-sizing: border-box; overflow: hidden; }
+
+/* ─── Header / Search ──────────────────────────────────────── */
+.header {
+    padding: 24px 20px 12px;  /* top | sides | bottom */
+    flex-shrink: 0;
+}
+
+.search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 9px 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.brand-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 15px;
+    min-width: 0;
+}
+
+.search-input::placeholder { color: var(--text-muted); }
+
+.search-icon-btn {
+    background: none;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    opacity: 0.75;
+}
+
+
+/* ─── Movie grid ───────────────────────────────────────────── */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 8px 20px;
+    flex: 1;          /* fills all space between header and footer */
+    min-height: 0;    /* required: lets flex child shrink below content size */
+    overflow-x: hidden;
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    box-sizing: border-box;
+}
+
+.grid::-webkit-scrollbar { display: none; }
+
+.movie-card {
+    position: relative;
+    border-radius: 12px;
+    aspect-ratio: 2 / 3;
+    cursor: pointer;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    transition: box-shadow 0.2s;
+    perspective: 700px;
+}
+
+.movie-card:active {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 18px var(--accent-glow);
+}
+
+/* ─── Flip card inner ──────────────────────────────────────── */
+.card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 12px;
+}
+
+.movie-card.flipped .card-inner {
+    transform: rotateY(180deg);
+}
+
+.card-front,
+.card-back {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.card-front {
+    overflow: hidden;
+}
+
+.card-front img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.card-back {
+    transform: rotateY(180deg);
+    background: rgba(22, 0, 18, 0.97);
+    border: 1px solid var(--nav-btn-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.card-info {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 8px 4px;
+    scrollbar-width: none;
+}
+
+.card-loading {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.card-rating {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 3px;
+}
+
+.card-year-genre {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    line-height: 1.3;
+}
+
+.card-synopsis {
+    font-size: 9px;
+    color: var(--text);
+    line-height: 1.45;
+    opacity: 0.85;
+}
+
+.card-play-btn {
+    flex-shrink: 0;
+    margin: 4px 8px 8px;
+    padding: 7px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.card-play-btn:active { opacity: 0.7; }
+
+.no-poster {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    text-align: center;
+    padding: 8px;
+    color: var(--text-muted);
+}
+
+.brand-icon-img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+}
+
+/* ─── Download / games buttons ─────────────────────────────── */
+.download-btn-row {
+    padding: 12px 20px 28px;  /* sticks naturally to the bottom of the flex column */
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex-shrink: 0;           /* never shrink — always visible at the bottom */
+}
+
+.download-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--chip-inactive);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.games-btn-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: pointer;
+    border-radius: 12px;
+}
+
+.download-btn:active { background: var(--accent-dim); }
+
+/* ─── Nav bar ──────────────────────────────────────────────── */
+.nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 0 20px;
+    position: relative;
+}
+
+.nav b {
+    font-size: 15px;
+    letter-spacing: 0.3px;
+}
+
+.nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.15s, opacity 0.15s;
+}
+
+.nav-btn:active {
+    transform: scale(0.88);
+    opacity: 0.7;
+}
+
+/* ─── Switch-movie confirmation modal ─────────────────────── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.65);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-box {
+    background: rgba(40, 0, 35, 0.97);
+    border: 1px solid var(--nav-btn-border);
+    border-radius: 18px;
+    padding: 28px 24px 22px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+
+.modal-msg {
+    margin: 0 0 22px;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.modal-btn {
+    flex: 1;
+    padding: 13px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.modal-btn:active { opacity: 0.7; }
+
+.modal-btn-cancel {
+    background: var(--chip-inactive);
+    color: var(--text);
+}
+
+.modal-btn-confirm {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+/* ─── Subtitle popup ───────────────────────────────────────── */
+.sub-popup {
+    display: none;
+    position: fixed;
+    right: 18px;
+    top: 72px;
+    background: rgba(30, 6, 26, 0.97);
+    border: 1px solid var(--nav-btn-border);
+    padding: 14px 18px;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+    z-index: 100;
+    min-width: 160px;
+    backdrop-filter: blur(10px);
+}
+
+.sub-popup-title {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sub-option {
+    padding: 9px 0;
+    font-size: 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: color 0.15s;
+}
+
+.sub-option:last-child { border-bottom: none; }
+.sub-option:active { color: var(--accent); }
+
+/* ─── Remote poster ────────────────────────────────────────── */
+.poster-large {
+    flex: 1;
+    min-height: 0;
+    margin: 0 auto;
+    width: 68%;
+    border-radius: 0px;
+    overflow: hidden;
+    /* box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border); */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.poster-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+/* ─── Progress bar ─────────────────────────────────────────── */
+.progress-bar {
+    width: 100%;
+    height: 10px;
+    background: var(--progress-track);
+    border-radius: 5px;
+    margin: 14px 0 6px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 5px;
+    width: 0%;
+    transition: width 0.4s linear;
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.time-display {
+    text-align: right;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+/* ─── Playback controls ────────────────────────────────────── */
+.controls {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin: 10px 0 14px;
+    flex-shrink: 0;
+}
+
+.btn-circle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.btn-circle:active {
+    opacity: 0.5;
+    transform: scale(0.88);
+}
+
+.btn-play {
+    width: 72px;
+    height: 72px;
+}
+
+/* ─── Stop button ──────────────────────────────────────────── */
+.stop-btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.stop-btn:active { background: var(--accent-dim); }
+
+.footer-bar {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+}
+
+
+
+/* ─── Download view ────────────────────────────────────────── */
+.torrent-results {
+    max-height: 52vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.section-label {
+    display: block;
+    margin: 18px 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ─── Torrent / download cards ─────────────────────────────── */
+.torrent-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.torrent-item:last-child { border-bottom: none; }
+
+.dl-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.dl-progress-track {
+    background: var(--progress-track);
+    border-radius: 4px;
+    height: 7px;
+    margin: 6px 0;
+}
+
+.dl-progress-fill {
+    background: var(--accent);
+    height: 100%;
+    border-radius: 4px;
+}
+
+.torrent-quality-btn {
+    margin: 3px;
+    padding: 6px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--chip-inactive);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s;
+}
+
+.torrent-quality-btn:active { background: var(--accent-dim); }

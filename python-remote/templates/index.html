@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, touch-action=manipulation">
+    <title>Huberry Stream</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="gallery-view">
+        <div class="header">
+            <div class="search-row">
+                <div class="brand-icon">
+                    <img src="/assets/logo.svg" class="brand-icon-img" alt="logo">
+                </div>
+                <input type="text" id="movie-search" class="search-input" placeholder="Search movies..." oninput="filterMovies()">
+                <button class="search-icon-btn" onclick="filterMovies()">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                        <circle cx="11" cy="11" r="7" stroke="white" stroke-width="2"/>
+                        <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+
+        </div>
+
+        <div class="grid" id="movie-grid">
+            {% for movie in movies %}
+            <div class="movie-card"
+                 data-title="{{ movie.title | e }}"
+                 data-video="{{ movie.video | e }}"
+                 data-poster="{{ movie.poster | e }}"
+                 data-watched="{{ 'true' if movie.watched else 'false' }}">
+                <div class="card-inner">
+                    <div class="card-front">
+                        {% if movie.poster %}
+                        <img src="{{ movie.poster }}" alt="{{ movie.title | e }}" loading="lazy">
+                        {% else %}
+                        <div class="no-poster">{{ movie.title | e }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="card-back">
+                        <div class="card-info"><div class="card-loading">Loading…</div></div>
+                        <button class="card-play-btn">&#9654; Play</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="download-btn-row">
+            <button class="download-btn" onclick="showDownloadView()">Download movies</button>
+            <img src="/assets/barGamesWithoutBT.svg" class="games-btn-img" alt="Huberry Games" onclick="console.log('Huberry Games clicked')" role="button">
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════ DOWNLOAD VIEW ═══════════════════════════════ -->
+    <div id="download-view">
+        <div class="nav">
+            <button class="nav-btn back-btn" onclick="closeDownloadView()">
+                <img src="/assets/buttonBack.svg" width="42" height="42" alt="back">
+            </button>
+            <b>Download Movies</b>
+            <span style="width:42px;"></span>
+        </div>
+
+        <div class="search-row" style="margin-bottom:15px;">
+            <input type="text" id="torrent-search-input" class="search-input"
+                   placeholder="Search YTS..."
+                   onkeydown="if(event.key==='Enter') torrentSearch()">
+            <button class="search-icon-btn" onclick="torrentSearch()">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+                    <circle cx="11" cy="11" r="7" stroke="white" stroke-width="2"/>
+                    <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+
+        <div id="torrent-results" class="torrent-results"></div>
+
+        <div class="active-downloads">
+            <b class="section-label">Active Downloads</b>
+            <div id="downloads-list"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════ REMOTE VIEW ═══════════════════════════════ -->
+    <div id="remote-view">
+        <div class="nav">
+            <button class="nav-btn back-btn" onclick="closeRemote()">
+                <img src="/assets/buttonBack.svg" width="42" height="42" alt="back">
+            </button>
+            <b id="active-title">Title</b>
+            <button class="nav-btn cc-btn" onclick="toggleSubs()">
+                <img src="/assets/ccbutton.svg" width="42" height="42" alt="CC">
+            </button>
+        </div>
+
+        <div id="sub-popup" class="sub-popup">
+            <p class="sub-popup-title">Subtitles</p>
+            <div class="sub-option" onclick="setSub(0)">None (Off)</div>
+            <div class="sub-option" onclick="setSub(1)">English</div>
+            <div class="sub-option" onclick="setSub(2)">Croatian</div>
+        </div>
+
+        <div class="poster-large">
+            <img id="remote-img" src="" alt="">
+        </div>
+
+        <div class="progress-bar" id="progress-bar-el">
+            <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div id="time-display" class="time-display">0:00:00</div>
+
+        <div class="controls">
+            <button class="btn-circle" onclick="fileCmd('backward')">
+                <img src="/assets/left.svg" width="50" height="50" alt="Backward">
+            </button>
+            <button class="btn-circle btn-play" onclick="fileCmd('play-pause')">
+                <img src="/assets/playpause.svg" width="66" height="66" alt="Play/Pause">
+            </button>
+            <button class="btn-circle" onclick="fileCmd('forward')">
+                <img src="/assets/right.svg" width="50" height="50" alt="Forward">
+            </button>
+        </div>
+
+        <button class="stop-btn" onclick="stopMovie()">Stop &amp; Save</button>
+
+        <img src="/assets/barGamesWithoutBT.svg" class="footer-bar" alt="huberry stream" onclick="console.log('Huberry Stream clicked')" role="button">
+    </div>
+
+    <!-- ══════════════════════════ SWITCH-MOVIE CONFIRM MODAL ═══════════════════════ -->
+    <div id="switch-modal" class="modal-overlay">
+        <div class="modal-box">
+            <p class="modal-msg">Starting a new movie will save the timestamp of the current one. Switch?</p>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="cancelSwitch()">No, go back</button>
+                <button class="modal-btn modal-btn-confirm" onclick="confirmSwitch()">Yes, switch</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

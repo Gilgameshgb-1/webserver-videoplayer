@@ -57,6 +57,7 @@ def search_yts(query, limit=20, page=1):
             "genre": m.get("genres", []),
             "poster": m.get("medium_cover_image", ""),
             "rating": m.get("rating", ""),
+            "synopsis": m.get("description_full", ""),
             "torrents": torrents,
         })
     return {"data": data}
@@ -91,10 +92,17 @@ def _flatten_torrent_files(save_path):
         os.rmdir(root)
 
 
+_INVALID_CHARS = r'\/:*?"<>|'
+
+def _safe_dirname(title):
+    for ch in _INVALID_CHARS:
+        title = title.replace(ch, '-')
+    return title.strip(' .-')
+
 def start_download(magnet_link, title, movies_dir, poster_url=None):
     global _download_counter
 
-    save_path = os.path.join(movies_dir, title)
+    save_path = os.path.join(movies_dir, _safe_dirname(title))
     os.makedirs(save_path, exist_ok=True)
 
     with _lock:
@@ -121,8 +129,8 @@ def start_download(magnet_link, title, movies_dir, poster_url=None):
 
 def _download_worker(dl_id, magnet_link, save_path, title, poster_url):
     try:
-        ses = lt.session()
-        ses.listen_on(6881, 6891)
+        # listen_on() was removed in libtorrent 2.x — use settings dict instead
+        ses = lt.session({'listen_interfaces': '0.0.0.0:6881'})
 
         params = lt.parse_magnet_uri(magnet_link)
         params.save_path = save_path
@@ -163,8 +171,9 @@ def _download_worker(dl_id, magnet_link, save_path, title, poster_url):
         _flatten_torrent_files(save_path)
         _cleanup_yts_images(save_path)
 
-    except:
-        active_downloads[dl_id]["state"] = "error"
+    except Exception as e:
+        if dl_id in active_downloads:
+            active_downloads[dl_id]["state"] = f"error: {e}"
 
 
 def get_download_status(dl_id=None):

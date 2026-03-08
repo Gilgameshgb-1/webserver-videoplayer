@@ -1,11 +1,16 @@
-import os
+﻿import os
 import json
 import socket
 import platform
-from flask import Flask, render_template_string, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from torrent_downloader import search_yts, start_download, get_download_status, cancel_download
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder='templates',
+    static_folder='static',
+    static_url_path='/static'
+)
 
 if platform.system() == "Windows":
     import win32file
@@ -144,6 +149,24 @@ def stop_movie():
     query_mpv(["stop"])
     return "ok"
 
+@app.route('/api/movieinfo')
+def movie_info():
+    title = request.args.get('title', '')
+    if not title:
+        return jsonify({"found": False})
+    results = search_yts(title, limit=1)
+    movies = results.get("data", [])
+    if not movies:
+        return jsonify({"found": False})
+    m = movies[0]
+    return jsonify({
+        "found": True,
+        "rating":   m.get("rating", "N/A"),
+        "synopsis": m.get("synopsis", ""),
+        "genre":    m.get("genre", []),
+        "year":     m.get("year", ""),
+    })
+
 @app.route('/api/torrent/search')
 def torrent_search():
     query = request.args.get('q', '')
@@ -167,7 +190,9 @@ def torrent_download():
 def torrent_status():
     dl_id = request.args.get('id', type=int)
     result = get_download_status(dl_id)
-    return jsonify(result if result else {"error": "not found"})
+    if dl_id is not None:
+        return jsonify(result if result is not None else {"error": "not found"})
+    return jsonify(result)  # always a list (possibly empty)
 
 @app.route('/api/torrent/cancel', methods=['POST'])
 def torrent_cancel():
@@ -178,368 +203,27 @@ def torrent_cancel():
     result = cancel_download(dl_id)
     return jsonify(result)
 
-HTML_TEMPLATE = '''    
-<!DOCTYPE html>
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-            :root { --bg: #f9f9f9; --text: #111; --accent: #3b82f6; }
-            .header { padding: 20px; }
-            .search-box {
-                background: rgba(255, 255, 255, 0.15);
-                backdrop-filter: blur(10px);          
-                -webkit-backdrop-filter: blur(5px);  
-                padding: 12px 20px;
-                border-radius: 25px;                  
-                display: flex;
-                align-items: center;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            }
-
-            .search-box input {
-                color: white;
-            }
-
-            .search-box input::placeholder {
-                color: rgba(255, 255, 255, 0.6);
-            }
-            
-            input { border: none; outline: none; width: 100%; font-size: 16px; background: transparent; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 15px; }
-            .movie-card { 
-                border-radius: 15px; 
-                overflow: hidden; 
-                aspect-ratio: 2/3; 
-                cursor: pointer; 
-                background: #eee;
-                width:85%; 
-                margin: 0 auto;
-                
-                border: 1px solid rgba(255, 255, 255, 0.3); 
-                
-                box-shadow: 0 0 15px rgba(255, 255, 255, 0.15), 
-                0 10px 20px rgba(0, 0, 0, 0.4);
-                
-                transition: all 0.3s ease;
-            }
-            .movie-card:active {
-                transform: scale(0.95); /* Slight shrink on tap */
-                border-color: rgba(255, 255, 255, 0.8);
-                box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
-            }
-            .movie-card img { width: 100%; height: 100%; object-fit: cover; }
-            #remote-view { display: none; padding: 20px; height: 100vh; box-sizing: border-box; text-align: center; }
-            .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-            .poster-large { width: 75%; aspect-ratio: 2/3; margin: 0 auto; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-            .poster-large img { width: 100%; height: 100%; object-fit: cover; }
-            .progress-bar { width: 100%; height: 12px; background: rgba(255, 255, 255, 0.8); border-radius: 3px; margin: 40px 0 10px 0; }
-            .progress-fill { width: 30%; height: 100%; background: rgba(242, 153, 74, 0.8); border-radius: 3px; }
-            .controls { display: flex; justify-content: space-around; align-items: center; margin: 30px 0; }
-            .btn-circle { background: none; border: none; cursor: pointer; padding: 5px; -webkit-tap-highlight-color: transparent; filter: invert(1);}
-            .btn-circle:active { opacity: 0.5; transform: scale(0.9); }
-            .stop-btn { background: #FFF; color: black; width: 100%; padding: 15px; border-radius: 12px; font-weight: bold; border: none; }
-            #sub-popup { display: none; position: fixed; right: 20px; top: 70px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); z-index: 100; color: #333; text-align: left; }
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: sans-serif;
-                color: #fff;
-                background-color: #000; 
-            }
-            body::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            
-            background-image: url('/assets/backgroundSmall.png');
-            background-size: cover;
-            background-position: center;
-            
-            opacity: 0.4;
-        }
-        </style>
-    </head>
-
-    <body>
-        <div id="gallery-view">
-            <div class="header">
-                <div class="search-box">
-                    <input type="text" id="movie-search" placeholder="Search movies..." oninput="filterMovies()">
-                </div>
-                <div style="margin-top:10px; display:flex; gap:8px;">
-                    <button onclick="showDownloadView()" style="flex:1; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.1); color:white; font-size:14px; cursor:pointer;">Download movies</button>
-                </div>
-            </div>
-            <div class="grid">
-                {% for movie in movies %}
-                <div class="movie-card" onclick="openRemote('{{ movie.title }}', '{{ movie.video }}', '{{ movie.poster }}')">
-                    <img src="{{ movie.poster }}">
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div id="download-view" style="display:none; padding:20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <span onclick="closeDownloadView()" style="font-size:28px; cursor:pointer;">←</span>
-                <b>Download Movies</b>
-                <span style="width:28px;"></span>
-            </div>
-
-            <div class="search-box" style="margin-bottom:15px;">
-                <input type="text" id="torrent-search-input" placeholder="Search YTS..." onkeydown="if(event.key==='Enter') torrentSearch()">
-                <span onclick="torrentSearch()" style="cursor:pointer; font-size:20px; margin-left:8px;"></span>
-            </div>
-
-            <div id="torrent-results" style="max-height:55vh; overflow-y:auto;"></div>
-
-            <div id="active-downloads" style="margin-top:20px;">
-                <b style="display:block; margin-bottom:10px;">Active Downloads</b>
-                <div id="downloads-list"></div>
-            </div>
-        </div>
-
-        <div id="remote-view">
-
-            <div class="nav">
-                <span onclick="closeRemote()" style="font-size: 28px; cursor: pointer;">←</span>
-                <b id="active-title">Title</b>
-                <span onclick="toggleSubs()" style="font-size: 18px; border: 2px solid #333; padding: 2px 6px; border-radius: 6px; font-weight: bold;">CC</span>
-            </div>
-           
-            <div id="sub-popup">
-                <p style="margin:0 0 10px 0;"><b>Subtitles</b></p>
-                <div onclick="setSub(0)" style="padding:5px 0;">None (Off)</div>
-                <div onclick="setSub(1)" style="padding:5px 0;">English</div>
-                <div onclick="setSub(2)" style="padding:5px 0;">Croatian</div>
-            </div>
-
-            <div class="poster-large"><img id="remote-img" src=""></div>
-            
-            <div class="progress-bar">
-                <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
-            </div>
-
-            <div id="time-display" style="text-align: right; color: #888; font-size: 12px;">0:00:00</div>
-
-            <div class="controls">
-
-                <button class="btn-circle" onclick="fileCmd('backward')">
-                    <img src="/assets/backward-new.svg?v=1" width="40">
-                </button>
-
-                <button class="btn-circle" onclick="fileCmd('play-pause')">
-                    <img src="/assets/play-pause.svg?v=1" width="60">
-                </button>
-
-                <button class="btn-circle" onclick="fileCmd('forward')">
-                    <img src="/assets/forward.svg?v=1" width="60">
-                </button>
-            </div>
-
-            <button class="stop-btn" onclick="stopMovie()">Stop movie</button>
-        </div>
-        
-        <script>
-            let isSeeking = false;
-        
-            function updateProgressBar(percent, timestamp) {
-                document.getElementById('progress-fill').style.width = percent + '%';
-                document.getElementById('time-display').innerText = timestamp;
-            }
-            setInterval(() => {
-                if (document.getElementById('remote-view').style.display === 'block' && !isSeeking) {
-                    fetch('/api/status')
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.percent) {
-                                updateProgressBar(data.percent, data.time);
-                            }
-                        });
-                }
-            }, 1000);
-
-            document.querySelector('.progress-bar').addEventListener('click', function(e) {
-                const rect = this.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const width = rect.right - rect.left;
-                const percentage = Math.round((x / width) * 100);
-                
-                isSeeking = true; // Attempt to fix visual progress bug but it's not too important
-                
-                document.getElementById('progress-fill').style.width = percentage + '%';
-                fetch('/api/command?q=' + encodeURIComponent('seek ' + percentage + ' absolute-percent')).then(() => {
-                    setTimeout(() => {
-                        isSeeking = false;
-                    }, 1500);
-                });
-            });
-
-
-
-            function openRemote(title, video, poster) {
-                document.getElementById('gallery-view').style.display = 'none';
-                document.getElementById('remote-view').style.display = 'block';
-                document.getElementById('active-title').innerText = title;
-                document.getElementById('remote-img').src = poster;
-                fetch('/api/load?file=' + encodeURIComponent(video));
-            }
-
-            function closeRemote() {
-                document.getElementById('gallery-view').style.display = 'block';
-                document.getElementById('remote-view').style.display = 'none';
-            }
-
-            function fileCmd(action) {
-                fetch('/files/' + action);
-            }
-
-            function stopMovie() { fetch('/api/stop'); closeRemote(); }
-
-            function toggleSubs() {
-                let p = document.getElementById('sub-popup');
-                p.style.display = p.style.display === 'block' ? 'none' : 'block';
-            }
-            function setSub(id) { fetch('/api/command?q=' + encodeURIComponent('set sid ' + id)); toggleSubs(); }
-            
-            function filterMovies() {
-                const query = document.getElementById('movie-search').value.toLowerCase();
-                const cards = document.querySelectorAll('.movie-card');
-                
-                cards.forEach(card => {
-                    const title = card.getAttribute('onclick').toLowerCase();
-                    if (title.includes(query)) {
-                        card.style.display = 'block';
-                    } else {
-                        card.style.display = 'none';
-                    }
-                });
-            }
-
-            function showDownloadView() {
-                document.getElementById('gallery-view').style.display = 'none';
-                document.getElementById('download-view').style.display = 'block';
-                refreshDownloads();
-            }
-            function closeDownloadView() {
-                document.getElementById('download-view').style.display = 'none';
-                document.getElementById('gallery-view').style.display = 'block';
-                fetch('/api/movies').then(r => r.json()).then(movies => {
-                    const grid = document.querySelector('.grid');
-                    grid.innerHTML = movies.map(m => `
-                        <div class="movie-card" onclick="openRemote('${m.title}', '${m.video}', '${m.poster}')">
-                            <img src="${m.poster}">
-                        </div>
-                    `).join('');
-                });
-            }
-
-            function torrentSearch() {
-                const q = document.getElementById('torrent-search-input').value;
-                if (!q) return;
-                const container = document.getElementById('torrent-results');
-                container.innerHTML = '<p style="text-align:center; opacity:0.6;">Searching...</p>';
-
-                fetch('/api/torrent/search?q=' + encodeURIComponent(q))
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.error) { container.innerHTML = '<p>' + data.error + '</p>'; return; }
-                        const items = data.data || [];
-                        if (!items.length) { container.innerHTML = '<p>No results</p>'; return; }
-                        container.innerHTML = items.map(m => {
-                            const torrents = (m.torrents || []).map(t =>
-                                `<button onclick='startDl(${JSON.stringify(t.magnet).replace(/'/g,"\\'")}, ${JSON.stringify(m.name).replace(/'/g,"\\'")}, ${JSON.stringify(m.poster || "").replace(/'/g,"\\'")})'
-                                    style="margin:3px; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.1); color:white; cursor:pointer; font-size:12px;">
-                                    ${t.quality || ''} ${t.type || ''} (${t.size || ''})
-                                </button>`
-                            ).join('');
-                            return `<div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
-                                <div style="display:flex; gap:10px; align-items:start;">
-                                    <img src="${m.poster || ''}" style="width:60px; border-radius:8px;" onerror="this.style.display='none'">
-                                    <div>
-                                        <b>${m.name || 'Unknown'}</b> <span style="opacity:0.5;">(${m.year || ''})</span>
-                                        <div style="font-size:12px; opacity:0.6; margin:4px 0;">${(m.genre || []).join(', ')}</div>
-                                        <div>${torrents}</div>
-                                    </div>
-                                </div>
-                            </div>`;
-                        }).join('');
-                    })
-                    .catch(e => { container.innerHTML = '<p>Error: ' + e + '</p>'; });
-            }
-
-            function startDl(magnet, title, poster_url) {
-                fetch('/api/torrent/download', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({magnet, title, poster_url})
-                }).then(r => r.json()).then(d => {
-                    refreshDownloads();
-                });
-            }
-
-            let dlInterval = null;
-            function refreshDownloads() {
-                fetch('/api/torrent/status')
-                    .then(r => r.json())
-                    .then(data => {
-                        const list = document.getElementById('downloads-list');
-                        if (!Array.isArray(data) || !data.length) {
-                            list.innerHTML = '<p style="opacity:0.5; font-size:13px;">No active downloads</p>';
-                            if (dlInterval) { clearInterval(dlInterval); dlInterval = null; }
-                            return;
-                        }
-                        list.innerHTML = data.map(d => {
-                            const rate = (d.download_rate / 1024).toFixed(0);
-                            return `<div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <b style="font-size:13px;">${d.title}</b>
-                                    <span style="font-size:12px; opacity:0.6;">${d.state}</span>
-                                </div>
-                                <div style="background:rgba(255,255,255,0.2); border-radius:4px; height:8px; margin:6px 0;">
-                                    <div style="background:rgba(242,153,74,0.8); height:100%; border-radius:4px; width:${d.progress}%;"></div>
-                                </div>
-                                <div style="display:flex; justify-content:space-between; font-size:11px; opacity:0.6;">
-                                    <span>${d.progress}% · ${rate} KB/s · ${d.num_peers} peers</span>
-                                    <span onclick="cancelDl(${d.id})" style="cursor:pointer; color:#ff6b6b;">Cancel</span>
-                                </div>
-                            </div>`;
-                        }).join('');
-                        if (!dlInterval) dlInterval = setInterval(refreshDownloads, 2000);
-                    });
-            }
-
-            function cancelDl(id) {
-                fetch('/api/torrent/cancel', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id})
-                }).then(() => refreshDownloads());
-            }
-        </script>
-    </body>
-</html>'''
-
 def _scan_movies():
+    resume_data = load_resume_data()
     movie_data = []
     if os.path.exists(MOVIES_DIR):
-        for folder in os.listdir(MOVIES_DIR):
+        for folder in sorted(os.listdir(MOVIES_DIR)):
             folder_path = os.path.join(MOVIES_DIR, folder)
             if os.path.isdir(folder_path):
                 files = os.listdir(folder_path)
                 video = next((f for f in files if f.endswith(('.mp4', '.mkv'))), None)
                 poster = next((f for f in files if f.endswith('.jpg')), None)
                 if video:
+                    full_path = os.path.abspath(
+                        os.path.join(MOVIES_DIR, folder, video)
+                    ).replace('\\', '/')
+                    resume_time = resume_data.get(full_path, 0)
                     movie_data.append({
                         'title': folder,
                         'video': f"{folder}/{video}",
-                        'poster': f"/get_poster/{folder}/{poster}"
+                        'poster': f"/get_poster/{folder}/{poster}" if poster else '',
+                        'watched': resume_time > 0,
+                        'resume_time': resume_time,
                     })
     return movie_data
 
@@ -549,7 +233,7 @@ def api_movies():
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE, movies=_scan_movies())
+    return render_template('index.html', movies=_scan_movies())
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
