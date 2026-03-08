@@ -45,7 +45,7 @@ Each movie lives in its own subfolder inside `movies/` at the project root.
 
 ## Features
 
-<p align="center"><img src="mdAssets/ImageMdOne.jpg" width="30%"> <img src="mdAssets/ImageMdTwo.jpg" width="30%"> <img src="mdAssets/ImageMdThree.jpg" width="30%"></p>
+<p align="center"><img src="mdAssets/ImageMdOne.jpg" width="29.7%"> <img src="mdAssets/ImageMdTwo.jpg" width="30%"> <img src="mdAssets/ImageMdThree.jpg" width="28.95%"></p>
 
 **Gallery**: Searchable 3-column movie grid. Tap any poster to see information about it and play it.
 
