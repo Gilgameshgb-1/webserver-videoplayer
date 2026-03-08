@@ -4,7 +4,7 @@ A phone-controlled movie player built around MPV. A C++ process runs MPV as a ba
 
 Built to run on a Raspberry Pi 5 as part of a larger retro-gaming Linux setup, but also works standalone on Windows during development.
 
-<img src="mdAssets/bannerStream.svg" width="60%" style="display: block; margin: 0 auto;">
+<p align="center"><img src="mdAssets/bannerStream.svg" width="60%"></p>
 
 ---
 
@@ -45,9 +45,7 @@ Each movie lives in its own subfolder inside `movies/` at the project root.
 
 ## Features
 
-<img src="mdAssets/imageMdOne.jpg" width="30%">
-<img src="mdAssets/ImageMdTwo.jpg" width="30%">
-<img src="mdAssets/ImageMdThree.jpg" width="30%">
+<p align="center"><img src="mdAssets/ImageMdOne.jpg" width="30%"> <img src="mdAssets/ImageMdTwo.jpg" width="30%"> <img src="mdAssets/ImageMdThree.jpg" width="30%"></p>
 
 **Gallery**: Searchable 3-column movie grid. Tap any poster to see information about it and play it.
 
