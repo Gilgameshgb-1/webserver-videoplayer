@@ -2,6 +2,8 @@
 import json
 import socket
 import platform
+import subprocess
+import time
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from torrent_downloader import search_yts, start_download, get_download_status, cancel_download
 
@@ -25,6 +27,26 @@ else:
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_PATH, 'assets')
 RESUME_FILE = os.path.join(BASE_PATH, 'resume_data.json')
+
+_MPV_EXE = 'wserVideoPlayer.exe' if platform.system() == 'Windows' else 'wserVideoPlayer'
+MPV_EXE_PATH = os.path.normpath(os.path.join(BASE_PATH, '..', 'build', _MPV_EXE))
+
+mpv_process = None
+
+def launch_mpv_if_needed():
+    global mpv_process
+    # Check if IPC is already responsive
+    if query_mpv(["get_property", "idle-active"]) is not None:
+        return True
+    # Launch if not running or process died
+    if mpv_process is None or mpv_process.poll() is not None:
+        mpv_process = subprocess.Popen([MPV_EXE_PATH])
+    # Wait up to 5 s for IPC to become available
+    for _ in range(20):
+        time.sleep(0.25)
+        if query_mpv(["get_property", "idle-active"]) is not None:
+            return True
+    return False
 
 def load_resume_data():
     if os.path.exists(RESUME_FILE):
@@ -106,16 +128,34 @@ def file_action(action):
         return "ok"
     return "error", 400
 
+@app.route('/api/quit')
+def quit_mpv():
+    global mpv_process
+    query_mpv(["quit"])
+    if mpv_process is not None:
+        try:
+            mpv_process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            mpv_process.kill()
+        mpv_process = None
+    return "ok"
+
 @app.route('/api/load')
 def api_load():
     try:
         filename = request.args.get('file')
-        full_path = os.path.abspath(os.path.join(MOVIES_DIR, filename)).replace('\\', '/') # sanitize
-        
+        full_path = os.path.abspath(os.path.join(MOVIES_DIR, filename))
+        # Path traversal guard
+        if not full_path.startswith(os.path.abspath(MOVIES_DIR)):
+            return "forbidden", 403
+        full_path = full_path.replace('\\', '/')
+
+        launch_mpv_if_needed()
+
         resume_data = load_resume_data()
         start_time = resume_data.get(full_path, 0)
         
-        query_mpv(["set_property", "start", str(start_time)]) 
+        query_mpv(["set_property", "start", str(start_time)])
 
         print(f"DEBUG: Resuming {filename} at {start_time}s")
         query_mpv(["loadfile", full_path, "replace"])
@@ -236,4 +276,6 @@ def index():
     return render_template('index.html', movies=_scan_movies())
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    host = os.environ.get('FLASK_HOST', '0.0.0.0')
+    port = int(os.environ.get('FLASK_PORT', '5000'))
+    app.run(host=host, port=port, debug=False)

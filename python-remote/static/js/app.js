@@ -162,6 +162,13 @@ function stopMovie() {
     closeRemote();
 }
 
+function quitPlayer() {
+    fetch('/api/quit').then(() => {
+        currentVideo = null;
+        showOnly('gallery-view');
+    });
+}
+
 function updateProgress(percent, timestamp) {
     document.getElementById('progress-fill').style.width = percent + '%';
     document.getElementById('time-display').innerText = timestamp;

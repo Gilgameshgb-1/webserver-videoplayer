@@ -522,6 +522,14 @@ body::after {
 
 .stop-btn:active { background: var(--accent-dim); }
 
+.quit-btn {
+    background: rgba(220, 50, 50, 0.15);
+    border-color: rgba(220, 50, 50, 0.35);
+    margin-top: 8px;
+}
+
+.quit-btn:active { background: rgba(220, 50, 50, 0.35); }
+
 .footer-bar {
     display: block;
     width: 100%;
