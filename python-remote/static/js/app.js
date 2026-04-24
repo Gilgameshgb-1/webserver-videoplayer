@@ -3,13 +3,13 @@ let seekTarget   = null;
 let dlInterval   = null;
 let currentVideo = null;
 let pendingLoad  = null;
+let streamVideo  = null;
 
-const DISPLAY = { 'gallery-view': 'flex', 'download-view': 'block', 'remote-view': 'flex' };
+const DISPLAY = { 'gallery-view': 'flex', 'download-view': 'block', 'remote-view': 'flex', 'stream-view': 'flex' };
+const ALL_VIEWS = ['gallery-view', 'download-view', 'remote-view', 'stream-view'];
 
 function showOnly(id) {
-    ['gallery-view', 'download-view', 'remote-view'].forEach(v => {
-        document.getElementById(v).style.display = 'none';
-    });
+    ALL_VIEWS.forEach(v => { document.getElementById(v).style.display = 'none'; });
     document.getElementById(id).style.display = DISPLAY[id];
 }
 
@@ -76,6 +76,61 @@ function closeDownloadView() {
         .catch(() => {});
 }
 
+function openStream(title, video) {
+    const videoEl = document.getElementById('stream-player');
+    document.getElementById('stream-title').innerText = title;
+    streamVideo = video;
+
+    // Clear any tracks from a previous stream
+    videoEl.querySelectorAll('track').forEach(t => t.remove());
+    videoEl.src = '/stream/' + video;
+
+    // Inject subtitle tracks
+    fetch('/api/subtitles?file=' + encodeURIComponent(video))
+        .then(r => r.json())
+        .then(subs => {
+            subs.forEach((sub, i) => {
+                const track = document.createElement('track');
+                track.kind = 'subtitles';
+                track.label = sub.label;
+                track.src = sub.url;
+                if (i === 0) track.default = true;
+                videoEl.appendChild(track);
+            });
+        })
+        .catch(() => {});
+
+    // Seek to resume position once metadata is available
+    fetch('/api/resume_get?file=' + encodeURIComponent(video))
+        .then(r => r.json())
+        .then(d => {
+            if (d.time > 5) {
+                if (videoEl.readyState >= 1) {
+                    videoEl.currentTime = d.time;
+                } else {
+                    videoEl.addEventListener('loadedmetadata', () => { videoEl.currentTime = d.time; }, { once: true });
+                }
+            }
+        })
+        .catch(() => {});
+    showOnly('stream-view');
+}
+
+function closeStream() {
+    const videoEl = document.getElementById('stream-player');
+    if (streamVideo && videoEl.currentTime > 5) {
+        fetch('/api/resume_save', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ file: streamVideo, time: videoEl.currentTime })
+        });
+    }
+    videoEl.pause();
+    videoEl.src = '';
+    streamVideo = null;
+    showOnly('gallery-view');
+}
+
 function rebuildGrid(movies) {
     const grid = document.getElementById('movie-grid');
     grid.innerHTML = movies.map(m => `
@@ -92,7 +147,8 @@ function rebuildGrid(movies) {
                 </div>
                 <div class="card-back">
                     <div class="card-info"><div class="card-loading">Loading…</div></div>
-                    <button class="card-play-btn">&#9654; Play</button>
+                    <button class="card-play-btn">&#9654; Play on TV</button>
+                    <button class="card-stream-btn">&#9654; Stream Here</button>
                 </div>
             </div>
         </div>
@@ -103,10 +159,14 @@ function rebuildGrid(movies) {
 function attachCardListeners() {
     document.querySelectorAll('.movie-card').forEach(card => {
         card.addEventListener('click', (e) => {
-            // Play button on back face
             if (e.target.closest('.card-play-btn')) {
                 card.classList.remove('flipped');
                 openRemote(card.dataset.title, card.dataset.video, card.dataset.poster);
+                return;
+            }
+            if (e.target.closest('.card-stream-btn')) {
+                card.classList.remove('flipped');
+                openStream(card.dataset.title, card.dataset.video);
                 return;
             }
             // Already flipped → flip back

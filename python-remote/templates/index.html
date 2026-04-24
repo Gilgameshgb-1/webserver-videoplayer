@@ -41,7 +41,8 @@
                     </div>
                     <div class="card-back">
                         <div class="card-info"><div class="card-loading">Loading…</div></div>
-                        <button class="card-play-btn">&#9654; Play</button>
+                        <button class="card-play-btn">&#9654; Play on TV</button>
+                        <button class="card-stream-btn">&#9654; Stream Here</button>
                     </div>
                 </div>
             </div>
@@ -128,6 +129,18 @@
         <button class="stop-btn quit-btn" onclick="quitPlayer()">&#x23FB; Close Player</button>
 
         <img src="/assets/barGamesWithoutBT.svg" class="footer-bar" alt="huberry stream" onclick="console.log('Huberry Stream clicked')" role="button">
+    </div>
+
+    <!-- ═══════════════════════════════ STREAM VIEW ═══════════════════════════════ -->
+    <div id="stream-view">
+        <div class="nav stream-nav">
+            <button class="nav-btn back-btn" onclick="closeStream()">
+                <img src="/assets/buttonBack.svg" width="42" height="42" alt="back">
+            </button>
+            <b id="stream-title">Title</b>
+            <span style="width:42px;"></span>
+        </div>
+        <video id="stream-player" controls playsinline preload="metadata"></video>
     </div>
 
     <!-- ══════════════════════════ SWITCH-MOVIE CONFIRM MODAL ═══════════════════════ -->

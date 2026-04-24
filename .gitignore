@@ -4,7 +4,10 @@ movies
 
 # Ignore deps
 deps
-python-remote/.venv
+
+# For linux and for windows
+pythin-remote/.venv
+python-remote/venv
 
 # build artifacts
 python-remote/__pycache__

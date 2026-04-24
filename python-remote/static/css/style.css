@@ -55,13 +55,15 @@ body::after {
 /* ─── View containers ──────────────────────────────────────── */
 #gallery-view,
 #download-view,
-#remote-view {
+#remote-view,
+#stream-view {
     display: none;
 }
 
 #gallery-view  { display: flex; flex-direction: column; height: 100dvh; }
 #download-view { padding: 0 16px 30px; overflow-y: auto; height: 100dvh; box-sizing: border-box; }
 #remote-view   { padding: 0 16px 20px; display: none; flex-direction: column; height: 100dvh; box-sizing: border-box; overflow: hidden; }
+#stream-view   { display: none; flex-direction: column; height: 100dvh; box-sizing: border-box; background: #000; }
 
 /* ─── Header / Search ──────────────────────────────────────── */
 .header {
@@ -225,21 +227,33 @@ body::after {
     opacity: 0.85;
 }
 
-.card-play-btn {
+.card-play-btn,
+.card-stream-btn {
     flex-shrink: 0;
-    margin: 4px 8px 8px;
+    margin: 4px 8px 0;
     padding: 7px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
     border-radius: 8px;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     transition: opacity 0.15s;
+    border: none;
 }
 
-.card-play-btn:active { opacity: 0.7; }
+.card-play-btn {
+    background: var(--accent);
+    color: #fff;
+}
+
+.card-stream-btn {
+    margin-bottom: 8px;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent) !important;
+}
+
+.card-play-btn:active,
+.card-stream-btn:active { opacity: 0.7; }
 
 .no-poster {
     width: 100%;
@@ -539,9 +553,22 @@ body::after {
     cursor: pointer;
     flex-shrink: 0;
 }
+
+/* ─── Stream view ──────────────────────────────────────────── */
+.stream-nav {
+    padding: 18px 16px 12px;
+    background: rgba(0, 0, 0, 0.6);
+    flex-shrink: 0;
 }
 
-
+#stream-player {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    background: #000;
+    display: block;
+    outline: none;
+}
 
 /* ─── Download view ────────────────────────────────────────── */
 .torrent-results {

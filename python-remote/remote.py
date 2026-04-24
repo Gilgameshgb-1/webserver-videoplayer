@@ -1,10 +1,11 @@
 ﻿import os
+import re
 import json
 import socket
 import platform
 import subprocess
 import time
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response, send_file
 from torrent_downloader import search_yts, start_download, get_download_status, cancel_download
 
 app = Flask(
@@ -242,6 +243,99 @@ def torrent_cancel():
         return jsonify({"error": "No id provided"}), 400
     result = cancel_download(dl_id)
     return jsonify(result)
+
+_MIME = {'.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.webm': 'video/webm', '.avi': 'video/x-msvideo'}
+
+def _srt_to_vtt(content):
+    # Fix timestamp separators: 00:00:01,000 → 00:00:01.000
+    content = re.sub(r'(\d{2}:\d{2}:\d{2}),(\d{3})', r'\1.\2', content)
+    return 'WEBVTT\n\n' + content
+
+@app.route('/subtitles/<path:filename>')
+def serve_subtitle(filename):
+    safe_path = os.path.abspath(os.path.join(MOVIES_DIR, filename))
+    if not safe_path.startswith(os.path.abspath(MOVIES_DIR)):
+        return "forbidden", 403
+    if not os.path.isfile(safe_path):
+        return "not found", 404
+    with open(safe_path, 'r', encoding='utf-8', errors='replace') as f:
+        vtt = _srt_to_vtt(f.read())
+    return Response(vtt, mimetype='text/vtt')
+
+@app.route('/api/subtitles')
+def list_subtitles():
+    video_path = request.args.get('file', '')
+    folder = os.path.dirname(video_path)
+    safe_folder = os.path.abspath(os.path.join(MOVIES_DIR, folder))
+    if not safe_folder.startswith(os.path.abspath(MOVIES_DIR)) or not os.path.isdir(safe_folder):
+        return jsonify([])
+    subs = []
+    for f in sorted(os.listdir(safe_folder)):
+        if f.lower().endswith('.srt'):
+            label = os.path.splitext(f)[0]
+            subs.append({'label': label, 'url': f'/subtitles/{folder}/{f}'})
+    return jsonify(subs)
+
+@app.route('/stream/<path:filename>')
+def stream_video(filename):
+    safe_path = os.path.abspath(os.path.join(MOVIES_DIR, filename))
+    if not safe_path.startswith(os.path.abspath(MOVIES_DIR)):
+        return "forbidden", 403
+    if not os.path.isfile(safe_path):
+        return "not found", 404
+
+    mime = _MIME.get(os.path.splitext(safe_path)[1].lower(), 'application/octet-stream')
+    file_size = os.path.getsize(safe_path)
+    range_header = request.headers.get('Range')
+
+    if range_header:
+        m = re.search(r'bytes=(\d+)-(\d*)', range_header)
+        if m:
+            byte1 = int(m.group(1))
+            byte2 = int(m.group(2)) if m.group(2) else file_size - 1
+            byte2 = min(byte2, file_size - 1)
+            length = byte2 - byte1 + 1
+
+            def _chunks():
+                with open(safe_path, 'rb') as f:
+                    f.seek(byte1)
+                    remaining = length
+                    while remaining > 0:
+                        chunk = f.read(min(65536, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+
+            return Response(_chunks(), 206, headers={
+                'Content-Range': f'bytes {byte1}-{byte2}/{file_size}',
+                'Accept-Ranges': 'bytes',
+                'Content-Length': length,
+                'Content-Type': mime,
+            })
+
+    return send_file(safe_path, mimetype=mime)
+
+@app.route('/api/resume_get')
+def resume_get():
+    filename = request.args.get('file', '')
+    if not filename:
+        return jsonify({'time': 0})
+    full_path = os.path.abspath(os.path.join(MOVIES_DIR, filename)).replace('\\', '/')
+    return jsonify({'time': load_resume_data().get(full_path, 0)})
+
+@app.route('/api/resume_save', methods=['POST'])
+def resume_save():
+    body = request.get_json()
+    filename = body.get('file', '')
+    time_val = float(body.get('time', 0))
+    if not filename:
+        return 'bad request', 400
+    full_path = os.path.abspath(os.path.join(MOVIES_DIR, filename)).replace('\\', '/')
+    data = load_resume_data()
+    data[full_path] = time_val
+    save_resume_data(data)
+    return 'ok'
 
 def _scan_movies():
     resume_data = load_resume_data()
