@@ -14,3 +14,4 @@ python-remote/__pycache__
 
 # Ignore .json for state of movies
 python-remote/resume_data.json
+python-remote/.state/

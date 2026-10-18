@@ -7,14 +7,15 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <!-- ═══════════════════════════════ GALLERY VIEW ═══════════════════════════════ -->
     <div id="gallery-view">
         <div class="header">
             <div class="search-row">
                 <div class="brand-icon">
                     <img src="/assets/logo.svg" class="brand-icon-img" alt="logo">
                 </div>
-                <input type="text" id="movie-search" class="search-input" placeholder="Search movies..." oninput="filterMovies()">
-                <button class="search-icon-btn" onclick="filterMovies()">
+                <input type="text" id="movie-search" class="search-input" placeholder="Search movies, 4K, Croatian..." oninput="filterMovies()">
+                <button class="search-icon-btn" onclick="filterMovies()" title="Search">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
                         <circle cx="11" cy="11" r="7" stroke="white" stroke-width="2"/>
                         <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="white" stroke-width="2" stroke-linecap="round"/>
@@ -22,15 +23,50 @@
                 </button>
             </div>
 
+            <!-- Library Filter Chips (Croatian Subtitles, 4K UHD, HDR10, Remux, Multi-Audio) -->
+            <div class="filter-chips-row" id="filter-chips">
+                <button class="filter-chip active" data-filter="all" onclick="setLibraryFilter('all', this)">
+                    All <span class="chip-count" id="count-all">{{ movies|length }}</span>
+                </button>
+                <button class="filter-chip filter-chip-hr" data-filter="hr_local" onclick="setLibraryFilter('hr_local', this)">
+                    🇭🇷 HR Subtitles <span class="chip-count" id="count-hr-local">0</span>
+                </button>
+                <button class="filter-chip" data-filter="hr_any" onclick="setLibraryFilter('hr_any', this)">
+                    🇭🇷 HR + Online <span class="chip-count" id="count-hr-any">0</span>
+                </button>
+                <button class="filter-chip" data-filter="4k" onclick="setLibraryFilter('4k', this)">
+                    4K UHD <span class="chip-count" id="count-4k">0</span>
+                </button>
+                <button class="filter-chip" data-filter="hdr" onclick="setLibraryFilter('hdr', this)">
+                    HDR10 / DV <span class="chip-count" id="count-hdr">0</span>
+                </button>
+                <button class="filter-chip" data-filter="remux" onclick="setLibraryFilter('remux', this)">
+                    Blu-ray Remux <span class="chip-count" id="count-remux">0</span>
+                </button>
+                <button class="filter-chip" data-filter="en_local" onclick="setLibraryFilter('en_local', this)">
+                    🇬🇧 EN Subtitles
+                </button>
+                <button class="filter-chip" data-filter="multi_audio" onclick="setLibraryFilter('multi_audio', this)">
+                    Multi-Audio
+                </button>
+            </div>
         </div>
 
         <div class="grid" id="movie-grid">
             {% for movie in movies %}
             <div class="movie-card"
+                 data-id="{{ movie.id | e }}"
                  data-title="{{ movie.title | e }}"
                  data-video="{{ movie.video | e }}"
                  data-poster="{{ movie.poster | e }}"
-                 data-watched="{{ 'true' if movie.watched else 'false' }}">
+                 data-watched="{{ 'true' if movie.watched else 'false' }}"
+                 data-is-4k="{{ 'true' if movie.is_4k else 'false' }}"
+                 data-is-hdr="{{ 'true' if movie.is_hdr else 'false' }}"
+                 data-is-remux="{{ 'true' if movie.is_remux else 'false' }}"
+                 data-hr-local="{{ 'true' if movie.has_hr_subs_local else 'false' }}"
+                 data-hr-online="{{ 'true' if movie.has_hr_subs_downloadable else 'false' }}"
+                 data-en-local="{{ 'true' if movie.has_en_subs_local else 'false' }}"
+                 data-multi-audio="{{ 'true' if movie.multi_audio else 'false' }}">
                 <div class="card-inner">
                     <div class="card-front">
                         {% if movie.poster %}
@@ -38,9 +74,30 @@
                         {% else %}
                         <div class="no-poster">{{ movie.title | e }}</div>
                         {% endif %}
+
+                        <!-- Capability Badges Overlay -->
+                        <div class="card-badges-top">
+                            {% if movie.is_4k %}<span class="cbadge cbadge-4k">4K</span>{% endif %}
+                            {% if movie.is_hdr %}<span class="cbadge cbadge-hdr">{{ movie.hdr_type or 'HDR10' }}</span>{% endif %}
+                            {% if movie.is_remux %}<span class="cbadge cbadge-remux">REMUX</span>{% endif %}
+                        </div>
+                        <div class="card-badges-bottom">
+                            {% if movie.has_hr_subs_local %}
+                            <span class="cbadge cbadge-hr" title="Local Croatian subtitles available">HR ✓</span>
+                            {% elif movie.has_hr_subs_downloadable %}
+                            <span class="cbadge cbadge-hr-dl" title="Croatian subtitles downloadable online">HR ⬇</span>
+                            {% endif %}
+                            {% if movie.has_en_subs_local %}
+                            <span class="cbadge cbadge-en">EN</span>
+                            {% endif %}
+                            {% if movie.multi_audio %}
+                            <span class="cbadge cbadge-audio">{{ movie.audio_track_count or 2 }} AUD</span>
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="card-back">
                         <div class="card-info"><div class="card-loading">Loading…</div></div>
+                        <button class="card-detail-btn">&#9432; Details &amp; HR Subs</button>
                         <button class="card-play-btn">&#9654; Play on TV</button>
                         <button class="card-stream-btn">&#9654; Stream Here</button>
                     </div>
@@ -55,6 +112,79 @@
         </div>
     </div>
 
+    <!-- ═══════════════════════════════ MOVIE DETAIL VIEW ═══════════════════════════════ -->
+    <div id="detail-view">
+        <div class="nav">
+            <button class="nav-btn back-btn" onclick="closeDetailView()">
+                <img src="/assets/buttonBack.svg" width="42" height="42" alt="back">
+            </button>
+            <b id="detail-nav-title">Movie Details</b>
+            <span style="width:42px;"></span>
+        </div>
+
+        <div class="detail-scroll">
+            <div class="detail-hero">
+                <img id="detail-poster" class="detail-poster" src="" alt="">
+                <div class="detail-meta">
+                    <h2 id="detail-title" class="detail-title">Title</h2>
+                    <div id="detail-subline" class="detail-subline"></div>
+                    <div id="detail-rating" class="detail-rating"></div>
+                    <div id="detail-specs" class="detail-specs"></div>
+                </div>
+            </div>
+
+            <!-- 5 Required Capability Indicators -->
+            <div class="section-label">Capabilities &amp; Language Support</div>
+            <div id="detail-indicators" class="detail-indicators-grid"></div>
+
+            <!-- Hardware / Playback Warnings -->
+            <div id="detail-warnings" class="detail-warnings"></div>
+
+            <!-- Primary Playback Actions -->
+            <div class="detail-actions">
+                <button class="detail-btn-tv" onclick="playFromDetail()">&#9654; Play on TV (HDMI)</button>
+                <button class="detail-btn-stream" onclick="streamFromDetail(false)">&#9654; Stream Here</button>
+                <button id="detail-btn-compat" class="detail-btn-compat" onclick="streamFromDetail(true)" style="display:none;">
+                    &#9654; Stream (AAC Audio Remux)
+                </button>
+            </div>
+
+            <p id="detail-synopsis" class="detail-synopsis"></p>
+
+            <!-- Local & Embedded Subtitles + Provenance / Sync Confidence -->
+            <div class="detail-subs-section">
+                <div class="detail-section-header">
+                    <span class="section-label" style="margin:0;">Installed Subtitles &amp; Sync Provenance</span>
+                    <label class="sub-upload-label">
+                        + Upload .srt/.zip
+                        <input type="file" id="sub-upload-input" accept=".srt,.ass,.ssa,.sub,.vtt,.zip" style="display:none;" onchange="uploadSubtitleFile(this)">
+                    </label>
+                </div>
+                <div id="detail-local-subs" class="detail-subs-list"></div>
+            </div>
+
+            <!-- Online Subtitle Discovery (Croatian & English) -->
+            <div class="detail-subs-section">
+                <div class="detail-section-header">
+                    <span class="section-label" style="margin:0;">Download Subtitles (Podnapisi · OpenSubtitles · SubDL)</span>
+                </div>
+                <div class="sub-search-bar">
+                    <button class="sub-lang-btn active" id="sub-search-hr" onclick="searchOnlineSubtitles('hr')">🇭🇷 Search Croatian (HR)</button>
+                    <button class="sub-lang-btn" id="sub-search-en" onclick="searchOnlineSubtitles('en')">🇬🇧 Search English (EN)</button>
+                </div>
+                <div id="detail-online-subs" class="detail-subs-list">
+                    <div class="sub-empty-hint">Tap "Search Croatian (HR)" to query providers using release &amp; file hash matching.</div>
+                </div>
+            </div>
+
+            <!-- Technical Audio / Video Stream Breakdown -->
+            <div class="detail-subs-section">
+                <span class="section-label" style="margin-top:0;">Media Container &amp; Audio Tracks</span>
+                <div id="detail-audio-tracks" class="detail-subs-list"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══════════════════════════════ DOWNLOAD VIEW ═══════════════════════════════ -->
     <div id="download-view">
         <div class="nav">
@@ -65,9 +195,9 @@
             <span style="width:42px;"></span>
         </div>
 
-        <div class="search-row" style="margin-bottom:15px;">
+        <div class="search-row" style="margin-bottom:8px;">
             <input type="text" id="torrent-search-input" class="search-input"
-                   placeholder="Search YTS..."
+                   placeholder="Search movies (RARBG · 1337x · TorrentGalaxy · YTS · 4K Remux)..."
                    onkeydown="if(event.key==='Enter') torrentSearch()">
             <button class="search-icon-btn" onclick="torrentSearch()">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
@@ -76,6 +206,59 @@
                 </svg>
             </button>
         </div>
+
+        <!-- anime.pi-style Filter Panel (Sort, Quality, Min Size, Max Size) -->
+        <div class="dl-filter-panel">
+            <div class="dl-filter-group">
+                <span class="dl-filter-label">Sort</span>
+                <div class="dl-pill-row" id="dl-sort-pills">
+                    <button class="dl-pill active" data-val="seeds" onclick="setDlFilter('sort', 'seeds')">Most seeders</button>
+                    <button class="dl-pill" data-val="remux" onclick="setDlFilter('sort', 'remux')">4K Remux first</button>
+                    <button class="dl-pill" data-val="largest" onclick="setDlFilter('sort', 'largest')">Largest first</button>
+                    <button class="dl-pill" data-val="smallest" onclick="setDlFilter('sort', 'smallest')">Smallest first</button>
+                </div>
+            </div>
+            <div class="dl-filter-group">
+                <span class="dl-filter-label">Quality</span>
+                <div class="dl-pill-row" id="dl-quality-pills">
+                    <button class="dl-pill active" data-val="" onclick="setDlFilter('quality', '')">Any</button>
+                    <button class="dl-pill" data-val="2160p" onclick="setDlFilter('quality', '2160p')">4K UHD</button>
+                    <button class="dl-pill" data-val="remux" onclick="setDlFilter('quality', 'remux')">Remux Only</button>
+                    <button class="dl-pill" data-val="1080p" onclick="setDlFilter('quality', '1080p')">1080p</button>
+                    <button class="dl-pill" data-val="720p" onclick="setDlFilter('quality', '720p')">720p</button>
+                </div>
+            </div>
+            <div class="dl-filter-group">
+                <span class="dl-filter-label">Min size</span>
+                <div class="dl-pill-row" id="dl-minsize-pills">
+                    <button class="dl-pill active" data-val="0" onclick="setDlSizePill('min', 0)">Any</button>
+                    <button class="dl-pill" data-val="2" onclick="setDlSizePill('min', 2)">2 GB</button>
+                    <button class="dl-pill" data-val="5" onclick="setDlSizePill('min', 5)">5 GB</button>
+                    <button class="dl-pill" data-val="15" onclick="setDlSizePill('min', 15)">15 GB</button>
+                    <button class="dl-pill" data-val="35" onclick="setDlSizePill('min', 35)">35 GB</button>
+                    <input type="number" id="dl-min-gb-input" class="dl-size-input" min="0" step="0.5" placeholder="Min GB" oninput="onDlCustomSizeInput('min', this.value)">
+                </div>
+            </div>
+            <div class="dl-filter-group">
+                <span class="dl-filter-label">Max size</span>
+                <div class="dl-pill-row" id="dl-maxsize-pills">
+                    <button class="dl-pill active" data-val="0" onclick="setDlSizePill('max', 0)">Any</button>
+                    <button class="dl-pill" data-val="4" onclick="setDlSizePill('max', 4)">4 GB</button>
+                    <button class="dl-pill" data-val="12" onclick="setDlSizePill('max', 12)">12 GB</button>
+                    <button class="dl-pill" data-val="30" onclick="setDlSizePill('max', 30)">30 GB</button>
+                    <button class="dl-pill" data-val="60" onclick="setDlSizePill('max', 60)">60 GB</button>
+                    <input type="number" id="dl-max-gb-input" class="dl-size-input" min="0" step="0.5" placeholder="Max GB" oninput="onDlCustomSizeInput('max', this.value)">
+                </div>
+            </div>
+        </div>
+
+        <!-- Direct Magnet / Authorized Remux Input -->
+        <div class="magnet-row">
+            <input type="text" id="magnet-direct-input" class="magnet-input" placeholder="Paste magnet:?xt=... link for 4K Blu-ray Remux">
+            <button class="magnet-add-btn" onclick="addDirectMagnet()">+ Add Magnet</button>
+        </div>
+
+        <div id="storage-status-bar" class="storage-status-bar"></div>
 
         <div id="torrent-results" class="torrent-results"></div>
 
@@ -97,16 +280,44 @@
             </button>
         </div>
 
+        <!-- Dynamic Subtitle, Sync Delay & Audio Popup -->
         <div id="sub-popup" class="sub-popup">
-            <p class="sub-popup-title">Subtitles</p>
-            <div class="sub-option" onclick="setSub(0)">None (Off)</div>
-            <div class="sub-option" onclick="setSub(1)">English</div>
-            <div class="sub-option" onclick="setSub(2)">Croatian</div>
+            <div class="sub-popup-header">
+                <p class="sub-popup-title">Subtitles</p>
+                <button class="sub-find-more-btn" onclick="openDetailFromRemote()">+ Find HR Subs</button>
+            </div>
+            <div id="sub-tracks-container">
+                <div class="sub-option" onclick="setSub('no')">None (Off)</div>
+                <div class="sub-option" onclick="setSub(1)">Track 1</div>
+            </div>
+
+            <p class="sub-popup-title" style="margin-top:12px;">Subtitle Sync Offset (<span id="sub-delay-val">0.0s</span>)</p>
+            <div class="sub-delay-row">
+                <button class="sub-delay-btn" onclick="adjustSubDelay(-0.5)">-0.5s</button>
+                <button class="sub-delay-btn" onclick="adjustSubDelay(-0.1)">-0.1s</button>
+                <button class="sub-delay-btn" onclick="resetSubDelay()">0.0s</button>
+                <button class="sub-delay-btn" onclick="adjustSubDelay(0.1)">+0.1s</button>
+                <button class="sub-delay-btn" onclick="adjustSubDelay(0.5)">+0.5s</button>
+            </div>
+
+            <p class="sub-popup-title" style="margin-top:12px;">Audio Track</p>
+            <div id="audio-tracks-container">
+                <div class="sub-option" onclick="setAudio(1)">Default Audio</div>
+            </div>
+
+            <p class="sub-popup-title" style="margin-top:12px;">HDMI Audio Mode</p>
+            <div class="sub-delay-row">
+                <button class="sub-delay-btn" onclick="setAudioMode('auto-safe')">Auto-Safe</button>
+                <button class="sub-delay-btn" onclick="setAudioMode('stereo')">Stereo 2.0</button>
+                <button class="sub-delay-btn" onclick="setAudioMode('passthrough')">AVR Pass</button>
+            </div>
         </div>
 
         <div class="poster-large">
             <img id="remote-img" src="" alt="">
         </div>
+
+        <div id="remote-telemetry" class="remote-telemetry"></div>
 
         <div class="progress-bar" id="progress-bar-el">
             <div id="progress-fill" class="progress-fill"></div>
@@ -138,9 +349,14 @@
                 <img src="/assets/buttonBack.svg" width="42" height="42" alt="back">
             </button>
             <b id="stream-title">Title</b>
-            <span style="width:42px;"></span>
+            <div class="stream-tools">
+                <button class="stream-tool-btn" onclick="adjustBrowserSubOffset(-0.5)" title="Subtitles -0.5s">Sub -0.5s</button>
+                <span id="stream-sub-offset" class="stream-sub-offset">0.0s</span>
+                <button class="stream-tool-btn" onclick="adjustBrowserSubOffset(0.5)" title="Subtitles +0.5s">Sub +0.5s</button>
+                <button class="stream-tool-btn" id="stream-compat-toggle" onclick="toggleStreamCompatMode()" title="Fix silent TrueHD/DTS audio in browser">AAC Audio</button>
+            </div>
         </div>
-        <video id="stream-player" controls playsinline preload="metadata"></video>
+        <video id="stream-player" controls playsinline preload="metadata" crossorigin="anonymous"></video>
     </div>
 
     <!-- ══════════════════════════ SWITCH-MOVIE CONFIRM MODAL ═══════════════════════ -->
