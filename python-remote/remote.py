@@ -314,6 +314,7 @@ def play_movie():
         aid=aid,
         sub_delay=sub_delay,
         audio_mode=audio_mode,
+        fps=movie.get("fps"),
     )
 
     prefer_lang = data.get("prefer_lang")
@@ -369,6 +370,7 @@ def api_load():
         start_pos=start_pos,
         sidecar_subs=sidecar_paths,
         sub_delay=sub_delay,
+        fps=movie.get("fps"),
     )
     _current_movie_rel = movie["rel_video"]
     return "ok"

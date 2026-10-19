@@ -22,6 +22,8 @@ import subprocess
 import threading
 import time
 
+import re
+
 import config
 import media_probe
 
@@ -29,6 +31,8 @@ _counter = [0]
 _lock = threading.Lock()
 _process = [None]
 _audio_mode = ['auto-safe']
+_current_drm_mode = [None]
+_cached_drm_modes = None
 
 
 def _next_id():
@@ -116,18 +120,105 @@ def is_running():
     return command(['get_property', 'idle-active'], timeout=0.6) is not None
 
 
-def ensure_running(wait_seconds=6.0):
-    """Launch wserVideoPlayer / mpv if its IPC socket is not responding."""
+def get_available_drm_modes():
+    """Query mpv --drm-mode=help and parse available DRM modelines for the connected display."""
+    global _cached_drm_modes
+    if _cached_drm_modes is not None:
+        return _cached_drm_modes
+
+    if not config.ON_PI:
+        _cached_drm_modes = []
+        return []
+
+    try:
+        out = subprocess.check_output(
+            [config.MPV_EXE, '--drm-mode=help'],
+            stderr=subprocess.STDOUT,
+            timeout=2.5,
+        ).decode('utf-8', 'ignore')
+
+        modes = []
+        for line in out.splitlines():
+            m = re.search(r'Mode\s+(\d+):\s*(\d+)x(\d+)[i]?\s*\((?:\d+x\d+@)?([\d\.]+)Hz\)', line)
+            if m:
+                modes.append({
+                    'index': int(m.group(1)),
+                    'width': int(m.group(2)),
+                    'height': int(m.group(3)),
+                    'hz': float(m.group(4)),
+                    'mode_str': f'{m.group(2)}x{m.group(3)}@{float(m.group(4)):.2f}Hz',
+                })
+        _cached_drm_modes = modes
+        return modes
+    except Exception:
+        _cached_drm_modes = []
+        return []
+
+
+def select_drm_mode_for_fps(fps):
+    """Find the best DRM mode matching the movie framerate on the connected display.
+
+    Prefers native resolution (e.g. 4K on a 4K TV, 1080p on a 1080p monitor)
+    matching the target framerate (e.g. 23.976 -> 23.98Hz / 24.00Hz).
+    Returns mode_str (e.g. '3840x2160@23.98Hz') or None if default 60Hz should be used.
+    """
+    if not fps or not config.ON_PI:
+        return None
+
+    try:
+        fps_val = float(fps)
+    except (TypeError, ValueError):
+        return None
+
+    modes = get_available_drm_modes()
+    if not modes:
+        return None
+
+    max_w = max(m['width'] for m in modes)
+    max_h = max(m['height'] for m in modes if m['width'] == max_w)
+    display_modes = [m for m in modes if m['width'] == max_w and m['height'] == max_h]
+    if not display_modes:
+        return None
+
+    candidates = []
+    for m in display_modes:
+        hz = m['hz']
+        # Direct 1:1 match (e.g. 23.98Hz for 23.976 fps, 24.00Hz for 24 fps)
+        diff = abs(hz - fps_val)
+        if diff < 0.25:
+            candidates.append((diff, m['mode_str']))
+        # 2:2 pulldown (e.g. 24 fps on 48Hz, or 25 fps on 50Hz)
+        elif abs(hz - (fps_val * 2)) < 0.25:
+            candidates.append((abs(hz - (fps_val * 2)), m['mode_str']))
+        # 5:5 pulldown (e.g. 24 fps on 120Hz)
+        elif abs(hz - (fps_val * 5)) < 0.5:
+            candidates.append((abs(hz - (fps_val * 5)), m['mode_str']))
+
+    if candidates:
+        candidates.sort(key=lambda x: x[0])
+        return candidates[0][1]
+    return None
+
+
+def ensure_running(wait_seconds=6.0, drm_mode=None):
+    """Launch wserVideoPlayer / mpv if not responding, or restart if drm_mode changed."""
     if is_running():
-        return True
+        if drm_mode == _current_drm_mode[0]:
+            return True
+        # If the requested DRM mode changed (e.g. switching between 60Hz and 24Hz), restart
+        quit_player()
 
     proc = _process[0]
     if proc is None or proc.poll() is not None:
         try:
             env = os.environ.copy()
             env['MPV_IPC_PATH'] = config.MPV_IPC_PATH
+            cmd = [config.MPV_EXE] + list(config.MPV_ARGS)
+            if drm_mode:
+                cmd.append(f'--drm-mode={drm_mode}')
+            _current_drm_mode[0] = drm_mode
             _process[0] = subprocess.Popen(
-                [config.MPV_EXE] + list(config.MPV_ARGS),
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 env=env,
@@ -143,9 +234,10 @@ def ensure_running(wait_seconds=6.0):
     return False
 
 
-def load(abs_path, start_seconds=0, sidecar_subs=None, sub_delay=0.0):
-    """Load `abs_path` on the TV player, attach sidecar subs, and apply sub_delay."""
-    if not ensure_running():
+def load(abs_path, start_seconds=0, sidecar_subs=None, sub_delay=0.0, fps=None):
+    """Load `abs_path` on the TV player, match refresh rate, attach sidecar subs, and apply sub_delay."""
+    drm_mode = select_drm_mode_for_fps(fps)
+    if not ensure_running(drm_mode=drm_mode):
         return False
 
     set_property('start', str(int(start_seconds or 0)))
@@ -207,7 +299,11 @@ def load(abs_path, start_seconds=0, sidecar_subs=None, sub_delay=0.0):
 
 
 def stop():
-    return command(['stop'])
+    command(['stop'])
+    # In DRM/KMS, quitting the player releases DRM master and restores
+    # the display output back to the default system 60 Hz immediately.
+    quit_player()
+    return True
 
 
 def quit_player():
@@ -219,6 +315,7 @@ def quit_player():
         except subprocess.TimeoutExpired:
             proc.kill()
         _process[0] = None
+    _current_drm_mode[0] = None
     return True
 
 
@@ -543,8 +640,8 @@ def get_status():
     }
 
 
-def play_file(video_path, start_pos=0.0, sidecar_subs=None, sid=None, aid=None, sub_delay=0.0, audio_mode='auto-safe'):
-    """Start playing `video_path`, attach sidecar subtitles, and return status."""
+def play_file(video_path, start_pos=0.0, sidecar_subs=None, sid=None, aid=None, sub_delay=0.0, audio_mode='auto-safe', fps=None):
+    """Start playing `video_path`, match display refresh rate, attach sidecar subtitles, and return status."""
     norm_subs = []
     for item in (sidecar_subs or []):
         if isinstance(item, str):
@@ -552,7 +649,14 @@ def play_file(video_path, start_pos=0.0, sidecar_subs=None, sid=None, aid=None, 
         elif isinstance(item, dict):
             norm_subs.append(item)
 
-    ok = load(video_path, start_seconds=start_pos, sidecar_subs=norm_subs, sub_delay=sub_delay)
+    if fps is None and os.path.isfile(video_path):
+        try:
+            meta = media_probe.probe(video_path) or {}
+            fps = meta.get('fps')
+        except Exception:
+            fps = None
+
+    ok = load(video_path, start_seconds=start_pos, sidecar_subs=norm_subs, sub_delay=sub_delay, fps=fps)
     if audio_mode:
         set_audio_mode(audio_mode)
 
